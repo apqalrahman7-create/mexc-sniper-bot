@@ -1,30 +1,22 @@
-# config.py - إعدادات البوت الذكي لـ MEXC
 import os
 
-# بيانات المنصة (استبدلها بمفاتيحك الحقيقية)
-API_KEY = "ضـع_مـفـتـاحـك_هـنـا"
-API_SECRET = "ضـع_الـسـر_هـنـا"
+# الأمان: جلب المفاتيح من النظام
+API_KEY = os.getenv('MEXC_API_KEY')
+API_SECRET = os.getenv('MEXC_API_SECRET')
 
-# إعدادات الميزانية الأساسية
-INITIAL_BALANCE = 56.0  # الرصيد الأولي
-LEVERAGE = 5            # الرافعة المالية الثابتة 5x
+# إعدادات الاستراتيجية
+LEVERAGE = 5
+INITIAL_BALANCE = 56.0
+MIN_TRADE_SIZE = 11.0  # لضمان الربح التراكمي وتوزيع المخاطر
+TIMEFRAME = '15m'
 
-# إعدادات المرونة والربح التراكمي
-# البوت سيحاول تخصيص حوالي 11$ لكل صفقة (لتغطية الحد الأدنى للمنصة)
-MIN_USDT_PER_TRADE = 11.0 
-MAX_TRADES_LIMIT = 20     # أقصى عدد صفقات يصل إليه عند زيادة الرصيد
-MIN_TRADES_LIMIT = 5      # أقل عدد صفقات يفتحها بالرصيد الحالي
-
-# إعدادات الوقت والعملات
-TIMEFRAME = '15m'         # تحليل شمعة الـ 15 دقيقة
-# قائمة بـ 20 عملة مقترحة (يمكنك تعديلها)
+# قائمة الـ 20 عملة
 SYMBOLS = [
-    'BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'BNB/USDT:USDT',
-    'AVAX/USDT:USDT', 'ADA/USDT:USDT', 'XRP/USDT:USDT', 'DOT/USDT:USDT',
-    'LINK/USDT:USDT', 'MATIC/USDT:USDT', 'NEAR/USDT:USDT', 'LTC/USDT:USDT',
-    'ATOM/USDT:USDT', 'UNI/USDT:USDT', 'ARB/USDT:USDT', 'OP/USDT:USDT',
+    'BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'ORDI/USDT:USDT',
+    'SUI/USDT:USDT', 'XRP/USDT:USDT', 'ARB/USDT:USDT', 'OP/USDT:USDT',
+    'LINK/USDT:USDT', 'AVAX/USDT:USDT', 'MATIC/USDT:USDT', 'NEAR/USDT:USDT',
+    'DOT/USDT:USDT', 'LTC/USDT:USDT', 'ATOM/USDT:USDT', 'UNI/USDT:USDT',
     'APT/USDT:USDT', 'FIL/USDT:USDT', 'VET/USDT:USDT', 'INJ/USDT:USDT'
 ]
 
-# مسارات البيانات
 MEMORY_FILE = "data/memory.json"
