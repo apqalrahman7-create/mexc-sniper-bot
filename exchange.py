@@ -1,52 +1,28 @@
-import ccxt
-import config
+import json, os
+import pandas as pd
 
-class MexcExchange:
-    def __init__(self):
-        # الاتصال بالمنصة باستخدام المفاتيح من ملف config
-        self.client = ccxt.mexc({
-            'apiKey': config.API_KEY,
-            'secret': config.API_SECRET,
-            'options': {
-                'defaultType': 'swap'  # تفعيل التداول الآجل (Futures)
-            }
-        })
+class AICore:
+    def __init__(self, memory_file='data/memory.json'):
+        self.memory_file = memory_file
+        self._init_memory()
 
-    def get_total_balance(self):
-        """جلب الرصيد الإجمالي المتاح في حساب الـ Futures"""
-        try:
-            balance = self.client.fetch_balance()
-            return float(balance['total']['USDT'])
-        except Exception as e:
-            print(f"خطأ في جلب الرصيد: {e}")
-            return config.INITIAL_BALANCE
+    def _init_memory(self):
+        if not os.path.exists('data'): os.makedirs('data')
+        if not os.path.exists(self.memory_file):
+            with open(self.memory_file, 'w') as f: json.dump({"failures": []}, f)
 
-    def setup_leverage(self, symbol):
-        """ضبط الرافعة المالية لـ 5x لكل عملة قبل الدخول"""
-        try:
-            self.client.set_leverage(config.LEVERAGE, symbol)
-        except Exception as e:
-            # بعض العملات قد تكون الرافعة مضبوطة مسبقاً
-            pass
+    def calculate_compound_logic(self, balance):
+        # الربح التراكمي: من 5 صفقات كحد أدنى إلى 20 كحد أقصى
+        slots = max(5, min(int(balance / 11.0), 20))
+        trade_amount = balance / slots
+        return slots, trade_amount
 
-    def fetch_market_data(self, symbol):
-        """جلب بيانات شموع 15 دقيقة لتحليلها بواسطة الـ AI Core"""
-        try:
-            # جلب آخر 50 شمعة
-            ohlcv = self.client.fetch_ohlcv(symbol, timeframe=config.TIMEFRAME, limit=50)
-            return ohlcv
-        except Exception as e:
-            print(f"خطأ في جلب بيانات {symbol}: {e}")
-            return None
-
-    def execute_order(self, symbol, side, amount):
-        """تنفيذ أمر بيع أو شراء"""
-        try:
-            # side: 'buy' أو 'sell'
-            order = self.client.create_market_order(symbol, side, amount)
-            print(f"تم تنفيذ صفقة {side} على {symbol} بنجاح.")
-            return order
-        except Exception as e:
-            print(f"فشل في تنفيذ الصفقة: {e}")
-            return None
-          
+    def analyze_momentum(self, ohlcv):
+        df = pd.DataFrame(ohlcv, columns=['ts', 'o', 'h', 'l', 'c', 'v'])
+        avg_vol = df['v'].tail(10).mean()
+        curr_vol = df['v'].iloc[-1]
+        # دخول عند زخم شراء قوي (سيولة أعلى بـ 30%)
+        if curr_vol > (avg_vol * 1.3) and df['c'].iloc[-1] > df['o'].iloc[-1]:
+            return "BUY_NOW"
+        return "WAIT"
+        
