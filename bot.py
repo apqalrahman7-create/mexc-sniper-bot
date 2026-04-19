@@ -1,13 +1,9 @@
 import streamlit as st
 import ccxt
-import pandas as pd
 import time
-import json
-import os
-from brain import AICore  # استدعاء العقل الذي برمجناه
+from brain import AICore
 
-# --- 🚀 الإعدادات الذكية ---
-# أضفنا 20 عملة كما طلبت ليتداول عليها البوت عند توفر السيولة
+# --- الإعدادات ---
 SYMBOLS = [
     'BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'ORDI/USDT:USDT',
     'SUI/USDT:USDT', 'XRP/USDT:USDT', 'ARB/USDT:USDT', 'OP/USDT:USDT',
@@ -18,19 +14,21 @@ SYMBOLS = [
 LEVERAGE = 5
 
 st.set_page_config(page_title="MEXC AI Sniper Core", layout="wide")
-st.title("🎯 MEXC AI Core - نظام التداول الذكي")
+st.title("🎯 MEXC AI Core - لوحة التحكم الذكية")
 
-# تفعيل عقل البوت
 brain = AICore()
 
 if 'running' not in st.session_state: st.session_state.running = False
 
+# الجانب الجانبي للإعدادات
 with st.sidebar:
-    st.header("🔑 إعدادات الوصول")
-    api_key = st.text_input("API Key", type="password")
-    api_secret = st.text_input("Secret Key", type="password")
-    if st.button("🚀 تشغيل المحرك الذكي"): st.session_state.running = True
-    if st.button("🛑 إيقاف"): st.session_state.running = False
+    st.header("🔑 إعدادات الحساب")
+    # محاولة جلب المفاتيح من النظام لسهولة الاستخدام
+    api_key = st.text_input("API Key", value=st.secrets.get("API_KEY", ""), type="password")
+    api_secret = st.text_input("Secret Key", value=st.secrets.get("API_SECRET", ""), type="password")
+    
+    if st.button("🚀 بدء التداول الآلي"): st.session_state.running = True
+    if st.button("🛑 إيقاف النظام"): st.session_state.running = False
 
 if st.session_state.running and api_key and api_secret:
     try:
@@ -39,55 +37,47 @@ if st.session_state.running and api_key and api_secret:
             'options': {'defaultType': 'swap'}, 'enableRateLimit': True
         })
 
-        col1, col2 = st.columns(2)
-        with col1: balance_area = st.empty()
-        with col2: stats_area = st.empty()
-        log_area = st.container()
+        # أماكن عرض البيانات الحية
+        bal_placeholder = st.empty()
+        log_placeholder = st.container()
 
         while st.session_state.running:
-            # 1. جلب الرصيد الحقيقي للربح التراكمي
+            # 1. تحديث الرصيد والبيانات
             balance = mexc.fetch_balance()
             current_bal = float(balance['total']['USDT'])
-            
-            # 2. حساب عدد الصفقات وحجمها ديناميكياً (AI Decision)
             num_slots, trade_size = brain.calculate_position_size(current_bal)
             
-            # 3. جلب الصفقات المفتوحة حالياً
+            # جلب الصفقات الحالية
             pos = mexc.fetch_positions()
             active_p = [p['symbol'] for p in pos if float(p.get('contracts', 0)) != 0]
             
-            balance_area.metric("الرصيد الإجمالي (تراكمي)", f"{current_bal:.2f} USDT")
-            stats_area.write(f"📊 الحد الأقصى للصفقات حالياً: **{num_slots}** | نشط: {len(active_p)}")
+            bal_placeholder.info(f"💰 الرصيد التراكمي: {current_bal:.2f} USDT | الصفقات المفتوحة: {len(active_p)}/{num_slots}")
 
             for symbol in SYMBOLS:
                 if len(active_p) >= num_slots: break 
-                
                 if symbol not in active_p:
-                    # جلب البيانات لتحليل السيولة (Momentum)
                     ohlcv = mexc.fetch_ohlcv(symbol, timeframe='15m', limit=20)
-                    
-                    # قرار الـ AI: فحص السيولة + فحص الذاكرة لمنع الفشل
                     decision = brain.analyze_momentum(ohlcv)
-                    is_safe = brain.is_learning_from_failure(symbol, "MOMENTUM_CHECK")
-
-                    if decision == "STRONG_MOMENTUM" and is_safe:
+                    
+                    if decision == "STRONG_MOMENTUM":
                         try:
-                            ticker = mexc.fetch_ticker(symbol)
-                            price = ticker['last']
+                            # ضبط الرافعة 5x أولاً قبل الشراء
+                            mexc.set_leverage(LEVERAGE, symbol)
                             
-                            # حساب الكمية بناءً على الرافعة 5x
-                            qty = (trade_size * LEVERAGE) / price
+                            ticker = mexc.fetch_ticker(symbol)
+                            qty = (trade_size * LEVERAGE) / ticker['last']
                             
                             mexc.create_market_order(symbol, 'buy', qty)
-                            with log_area:
-                                st.success(f"✅ {symbol}: دخول ذكي بمبلغ {trade_size:.2f}$")
+                            st.toast(f"✅ تم دخول صفقة ذكية: {symbol}", icon='🚀')
+                            with log_placeholder:
+                                st.write(f"🕒 {time.strftime('%H:%M:%S')} | تم شراء **{symbol}** بمبلغ {trade_size:.2f}$")
                             active_p.append(symbol)
                         except Exception as e:
-                            brain.record_failure(symbol, "EXECUTION_ERROR", str(e))
                             continue
             
-            time.sleep(30) # انتظار نصف دقيقة قبل الفحص التالي
+            time.sleep(30)
     except Exception as e:
-        st.error(f"⚠️ خطأ: {str(e)}")
-        time.sleep(10)
-        
+        st.error(f"⚠️ خطأ في الاتصال: {e}")
+        st.session_state.running = False
+
+# نصيحة: إذا كنت ستستخدم هذا الكود على الهاتف، يفضل تركه مفتوحاً في المتصفح.
