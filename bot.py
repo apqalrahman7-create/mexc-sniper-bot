@@ -1,83 +1,80 @@
-import streamlit as st
-import ccxt
-import time
-from brain import AICore
+cat <<EOF > start.py
+import os, ccxt, time, pandas as pd
+from datetime import datetime, timezone
 
-# --- الإعدادات ---
-SYMBOLS = [
-    'BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'ORDI/USDT:USDT',
-    'SUI/USDT:USDT', 'XRP/USDT:USDT', 'ARB/USDT:USDT', 'OP/USDT:USDT',
-    'LINK/USDT:USDT', 'AVAX/USDT:USDT', 'MATIC/USDT:USDT', 'NEAR/USDT:USDT',
-    'DOT/USDT:USDT', 'LTC/USDT:USDT', 'ATOM/USDT:USDT', 'UNI/USDT:USDT',
-    'APT/USDT:USDT', 'FIL/USDT:USDT', 'VET/USDT:USDT', 'INJ/USDT:USDT'
-]
-LEVERAGE = 5
+mexc = ccxt.mexc({
+    'apiKey': os.getenv('MEXC_API_KEY'),
+    'secret': os.getenv('MEXC_API_SECRET'),
+    'enableRateLimit': True,
+    'options': {'defaultType': 'swap', 'adjustForTimeDifference': True}
+})
 
-st.set_page_config(page_title="MEXC AI Sniper Core", layout="wide")
-st.title("🎯 MEXC AI Core - لوحة التحكم الذكية")
+trade_times = {}
 
-brain = AICore()
-
-if 'running' not in st.session_state: st.session_state.running = False
-
-# الجانب الجانبي للإعدادات
-with st.sidebar:
-    st.header("🔑 إعدادات الحساب")
-    # محاولة جلب المفاتيح من النظام لسهولة الاستخدام
-    api_key = st.text_input("API Key", value=st.secrets.get("API_KEY", ""), type="password")
-    api_secret = st.text_input("Secret Key", value=st.secrets.get("API_SECRET", ""), type="password")
-    
-    if st.button("🚀 بدء التداول الآلي"): st.session_state.running = True
-    if st.button("🛑 إيقاف النظام"): st.session_state.running = False
-
-if st.session_state.running and api_key and api_secret:
+def analyze_market(symbol):
     try:
-        mexc = ccxt.mexc({
-            'apiKey': api_key, 'secret': api_secret,
-            'options': {'defaultType': 'swap'}, 'enableRateLimit': True
-        })
+        ohlcv = mexc.fetch_ohlcv(symbol, timeframe='1m', limit=50)
+        df = pd.DataFrame(ohlcv, columns=['t', 'o', 'h', 'l', 'c', 'v'])
+        delta = df['c'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rsi = 100 - (100 / (1 + (gain / (loss + 0.000001))))
+        last_rsi = rsi.iloc[-1]
+        if last_rsi > 65: return 'buy', df['c'].iloc[-1]
+        if last_rsi < 35: return 'sell', df['c'].iloc[-1]
+    except: pass
+    return None, 0
 
-        # أماكن عرض البيانات الحية
-        bal_placeholder = st.empty()
-        log_placeholder = st.container()
+def main():
+    symbols = ['SOL/USDT:USDT', 'NEAR/USDT:USDT', 'PEPE/USDT:USDT', 'WIF/USDT:USDT', 'FET/USDT:USDT',
+               'SUI/USDT:USDT', 'ARB/USDT:USDT', 'OP/USDT:USDT', 'APT/USDT:USDT', 'TIA/USDT:USDT',
+               'AVAX/USDT:USDT', 'DOGE/USDT:USDT', 'XRP/USDT:USDT', 'RENDER/USDT:USDT', 'LINK/USDT:USDT',
+               'INJ/USDT:USDT', 'STX/USDT:USDT', 'SEI/USDT:USDT', 'FLOKI/USDT:USDT', 'ETH/USDT:USDT']
+    
+    max_trades = 5
+    print("🚀 Sniper Multi-Core: Cleaning Warehouse & Starting 5 Slots")
 
-        while st.session_state.running:
-            # 1. تحديث الرصيد والبيانات
+    while True:
+        try:
+            pos_data = mexc.fetch_positions(params={'settle': 'USDT'})
+            active_trades = [p for p in pos_data if p.get('contracts') and float(p['contracts']) > 0]
+            current_symbols = [p['symbol'] for p in active_trades]
+            now = datetime.now(timezone.utc).timestamp()
+
+            # إغلاق الصفقات (بعد 20 دقيقة)
+            for p in active_trades:
+                s = p['symbol']
+                pnl = float(p.get('unrealizedPnl', 0) or 0)
+                entry_time = trade_times.get(s, int(p.get('timestamp', 0)) / 1000)
+                if (now - entry_time) / 60 >= 20 or pnl >= 2.0:
+                    mexc.create_market_order(s, 'sell' if p['side'] == 'long' else 'buy', p['contracts'], {'reduceOnly': True})
+                    if s in trade_times: del trade_times[s]
+
+            # فتح حتى 5 صفقات متنوعة
             balance = mexc.fetch_balance()
-            current_bal = float(balance['total']['USDT'])
-            num_slots, trade_size = brain.calculate_position_size(current_bal)
-            
-            # جلب الصفقات الحالية
-            pos = mexc.fetch_positions()
-            active_p = [p['symbol'] for p in pos if float(p.get('contracts', 0)) != 0]
-            
-            bal_placeholder.info(f"💰 الرصيد التراكمي: {current_bal:.2f} USDT | الصفقات المفتوحة: {len(active_p)}/{num_slots}")
+            free_usdt = float(balance['total'].get('USDT', 0)) if len(active_trades) == 0 else float(balance['free'].get('USDT', 0))
+            slots_to_fill = max_trades - len(active_trades)
 
-            for symbol in SYMBOLS:
-                if len(active_p) >= num_slots: break 
-                if symbol not in active_p:
-                    ohlcv = mexc.fetch_ohlcv(symbol, timeframe='15m', limit=20)
-                    decision = brain.analyze_momentum(ohlcv)
-                    
-                    if decision == "STRONG_MOMENTUM":
+            if slots_to_fill > 0 and free_usdt > 10:
+                trade_budget = (free_usdt * 0.90) / slots_to_fill
+                for s in symbols:
+                    if s in current_symbols: continue
+                    side, price = analyze_market(s)
+                    if side:
                         try:
-                            # ضبط الرافعة 5x أولاً قبل الشراء
-                            mexc.set_leverage(LEVERAGE, symbol)
-                            
-                            ticker = mexc.fetch_ticker(symbol)
-                            qty = (trade_size * LEVERAGE) / ticker['last']
-                            
-                            mexc.create_market_order(symbol, 'buy', qty)
-                            st.toast(f"✅ تم دخول صفقة ذكية: {symbol}", icon='🚀')
-                            with log_placeholder:
-                                st.write(f"🕒 {time.strftime('%H:%M:%S')} | تم شراء **{symbol}** بمبلغ {trade_size:.2f}$")
-                            active_p.append(symbol)
-                        except Exception as e:
-                            continue
-            
-            time.sleep(30)
-    except Exception as e:
-        st.error(f"⚠️ خطأ في الاتصال: {e}")
-        st.session_state.running = False
+                            mexc.set_leverage(20, s)
+                            qty = (trade_budget * 20) / price
+                            mexc.create_market_order(s, side, mexc.amount_to_precision(s, qty))
+                            trade_times[s] = now
+                            print(f"🔥 Slot Filled: {s}")
+                            current_symbols.append(s)
+                            slots_to_fill -= 1
+                            if slots_to_fill <= 0: break
+                        except: continue
+            time.sleep(15)
+        except Exception as e:
+            time.sleep(20)
 
-# نصيحة: إذا كنت ستستخدم هذا الكود على الهاتف، يفضل تركه مفتوحاً في المتصفح.
+if __name__ == '__main__':
+    main()
+EOF
