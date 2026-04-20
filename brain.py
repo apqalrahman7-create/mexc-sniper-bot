@@ -15,17 +15,25 @@ class AICore:
                 json.dump({"failed_patterns": [], "history": []}, f)
 
     def calculate_position_size(self, current_balance):
-        # تقسيم الرصيد لضمان الربح التراكمي (بين 5 إلى 20 صفقة)
-        min_trade_size = 11.0
-        slots = max(5, min(int(current_balance / min_trade_size), 20))
-        return slots, (current_balance / slots)
+        # تعديل: نركز القوة في 5 صفقات فقط لتعظيم الربح التراكمي
+        slots = 5 
+        # نستخدم 95% من الرصيد لضمان دخول قوي مع ترك هامش بسيط للرسوم
+        trade_margin = (current_balance * 0.95) / slots
+        return slots, trade_margin
 
     def analyze_momentum(self, ohlcv):
         df = pd.DataFrame(ohlcv, columns=['ts', 'o', 'h', 'l', 'c', 'v'])
-        avg_v = df['v'].tail(10).mean()
-        curr_v = df['v'].iloc[-1]
-        # إذا كان حجم التداول الحالي أكبر من المتوسط بـ 30% والسعر صاعد
-        if curr_v > (avg_v * 1.3) and df['c'].iloc[-1] > df['o'].iloc[-1]:
+        
+        # مؤشرات سريعة للسكالبينج (تغير السعر في آخر 3 دقائق)
+        last_prices = df['c'].tail(3).tolist()
+        
+        # شرط دخول أكثر مرونة: إذا كان هناك صعود مستمر في آخر 3 شموع
+        if last_prices[-1] > last_prices[-2] > last_prices[-3]:
             return "BUY_SIGNAL"
+        
+        # شرط بيع (Short): إذا كان هناك هبوط مستمر
+        if last_prices[-1] < last_prices[-2] < last_prices[-3]:
+            return "SELL_SIGNAL"
+            
         return "WAIT"
-      
+        
