@@ -1,16 +1,16 @@
 import os
 
-# الأمان: جلب المفاتيح من النظام
+# الأمان
 API_KEY = os.getenv('MEXC_API_KEY')
 API_SECRET = os.getenv('MEXC_API_SECRET')
 
-# إعدادات الاستراتيجية
-LEVERAGE = 5
-INITIAL_BALANCE = 56.0
-MIN_TRADE_SIZE = 11.0  # لضمان الربح التراكمي وتوزيع المخاطر
-TIMEFRAME = '15m'
+# إعدادات مطورة للتطور والربح التراكمي
+LEVERAGE = 10           # رفع الرافعة لـ 10 كما طلبت لزيادة القوة
+INITIAL_BALANCE = 56.0  
+MIN_TRADE_SIZE = 5.0    # تقليل الحد الأدنى للسماح بفتح 5 صفقات دائماً
+TIMEFRAME = '1m'        # تغيير الوقت لـ 1 دقيقة لمراقبة الإغلاق بدقة
 
-# قائمة الـ 20 عملة
+# قائمة العملات (تم الإبقاء عليها كما هي)
 SYMBOLS = [
     'BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT', 'ORDI/USDT:USDT',
     'SUI/USDT:USDT', 'XRP/USDT:USDT', 'ARB/USDT:USDT', 'OP/USDT:USDT',
