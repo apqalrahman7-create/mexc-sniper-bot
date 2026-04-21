@@ -15,24 +15,26 @@ class AICore:
                 json.dump({"failed_patterns": [], "history": []}, f)
 
     def calculate_position_size(self, current_balance):
-        # تعديل: نركز القوة في 5 صفقات فقط لتعظيم الربح التراكمي
-        slots = 5 
-        # نستخدم 95% من الرصيد لضمان دخول قوي مع ترك هامش بسيط للرسوم
-        trade_margin = (current_balance * 0.95) / slots
+        # تعديل: 3 صفقات فقط لتركيز الميزانية (الربح التراكمي)
+        slots = 3 
+        # نستخدم 98% من الرصيد لضمان دخول قوي جداً مع نظام Cross
+        trade_margin = (current_balance * 0.98) / slots
         return slots, trade_margin
 
     def analyze_momentum(self, ohlcv):
+        """الاستراتيجية المطلوبة: أحمر = شراء | أخضر = بيع"""
         df = pd.DataFrame(ohlcv, columns=['ts', 'o', 'h', 'l', 'c', 'v'])
         
-        # مؤشرات سريعة للسكالبينج (تغير السعر في آخر 3 دقائق)
-        last_prices = df['c'].tail(3).tolist()
+        # جلب بيانات آخر شمعة مكتملة
+        last_open = df['o'].iloc[-1]
+        last_close = df['c'].iloc[-1]
         
-        # شرط دخول أكثر مرونة: إذا كان هناك صعود مستمر في آخر 3 شموع
-        if last_prices[-1] > last_prices[-2] > last_prices[-3]:
+        # إذا كانت الشمعة حمراء (إغلاق أقل من افتتاح) -> نشتري Long
+        if last_close < last_open:
             return "BUY_SIGNAL"
         
-        # شرط بيع (Short): إذا كان هناك هبوط مستمر
-        if last_prices[-1] < last_prices[-2] < last_prices[-3]:
+        # إذا كانت الشمعة خضراء (إغلاق أعلى من افتتاح) -> نبيع Short
+        if last_close > last_open:
             return "SELL_SIGNAL"
             
         return "WAIT"
